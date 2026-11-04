@@ -80,6 +80,15 @@ Tiles running an AI agent show a badge in the title bar:
 termdeck saves the layout, the working directory of every tile and the Claude Code session running in it.
 On the next start, the tiles come back as they were, and each Claude session continues with `claude --resume`.
 
+### Drop images and files into a chat
+- Drag images or files from your file manager or browser onto a tile. termdeck inserts their paths (shell-quoted)
+  at the cursor, the same way a regular terminal does.
+- **Claude Code and Codex attach dropped images automatically:** the path turns into `[Image #1]` in the prompt.
+- Images without a file (e.g. dragged from a web page) are saved to `~/.config/termdeck/drops/` first.
+  Files there are cleaned up after 14 days.
+- **Paste screenshots:** if the clipboard holds an image instead of text, `Ctrl+Shift+V` or right-click saves it
+  as a PNG and inserts its path. (Inside Claude Code, `Ctrl+V` still uses Claude's own image paste.)
+
 ### Terminal basics
 - Built on [xterm.js](https://xtermjs.org/) with WebGL rendering, truecolor and 10 000 lines of scrollback.
 - Tab titles set by programs (e.g. Claude Code's task titles) are shown in the title bar.
@@ -132,7 +141,8 @@ This installs a `.desktop` entry and the icon into `~/.local/share`, so termdeck
 | Arrange all tiles evenly | `Ctrl+Shift+B` |
 | Take over sessions from other windows | `Ctrl+Shift+O` |
 | Move focus between tiles | `Alt+←/→/↑/↓` |
-| Copy / paste | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
+| Copy / paste (pastes clipboard images as a file) | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
+| Attach an image or file | drag it onto a tile |
 | Font size bigger / smaller / reset | `Ctrl++` / `Ctrl+-` / `Ctrl+0` |
 | Fullscreen on/off | `F11` |
 | Show help | `?` button in the top bar |
@@ -178,6 +188,7 @@ termdeck does not wrap or patch the agents. It reads the files they already writ
 | What | Where |
 |---|---|
 | Saved layout and sessions | `~/.config/termdeck/session.json` |
+| Dropped/pasted images without a file | `~/.config/termdeck/drops/` (kept for 14 days) |
 | Known accounts and their last limits | `~/.config/termdeck/accounts.json` (no tokens are stored) |
 | Desktop entry | `~/.local/share/applications/termdeck.desktop` |
 | Icon | `~/.local/share/icons/hicolor/{scalable,256x256}/apps/termdeck.*` |

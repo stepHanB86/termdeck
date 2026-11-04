@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('deck', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('deck', {
   onExit: (fn) => ipcRenderer.on('pty:exit', (_e, id) => fn(id)),
   clipWrite: (text, type) => ipcRenderer.send('clip:write', text, type),
   clipRead: (type) => ipcRenderer.invoke('clip:read', type),
+  clipImage: () => ipcRenderer.invoke('clip:image'),
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
+  saveDrop: (name, bytes) => ipcRenderer.invoke('drop:save', name, bytes),
+  saveDropUrl: (url) => ipcRenderer.invoke('drop:url', url),
   onAiStatus: (fn) => ipcRenderer.on('ai:status', (_e, s) => fn(s)),
   takeoverList: () => ipcRenderer.invoke('takeover:list'),
   takeoverClaude: (pid, wait) => ipcRenderer.invoke('takeover:claude', { pid, wait }),

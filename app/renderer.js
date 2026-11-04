@@ -107,7 +107,22 @@ async function createPane(cwd, cmd, attach) {
   termEl.addEventListener('contextmenu', async (e) => {
     e.preventDefault();
     const s = term.getSelection();
-    if (s) { deck.clipWrite(s); term.clearSelection(); } else term.paste(await deck.clipRead());
+    if (s) { deck.clipWrite(s); term.clearSelection(); } else pasteSmart(pane);
+  });
+
+  // Dateien/Bilder hineinziehen → Pfad einfügen (Claude Code/Codex hängen Bilder dann an)
+  const isFileDrag = (e) => [...(e.dataTransfer?.types || [])].some((t) => t === 'Files' || t === 'text/uri-list');
+  let dragDepth = 0;
+  el.addEventListener('dragenter', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); dragDepth++; el.classList.add('file-over'); });
+  el.addEventListener('dragover', (e) => { if (!isFileDrag(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  el.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; el.classList.remove('file-over'); } });
+  el.addEventListener('drop', async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    dragDepth = 0; el.classList.remove('file-over');
+    setFocus(id);
+    const paths = await droppedPaths(e.dataTransfer);
+    if (paths.length) { term.paste(paths.map(shellQuote).join(' ') + ' '); term.focus(); }
+    else flash('Nichts Einfügbares gefunden');
   });
 
   const head = el.querySelector('.head');
@@ -157,6 +172,37 @@ deck.onData((ptyId, data) => {
   if (focusedId !== p.id) p.el.classList.add('unseen');
 });
 deck.onExit((ptyId) => { const p = byPty.get(ptyId); if (p) closePane(p.id, true); });
+
+// ---------- Einfügen: Text, Bilder, Dateien ----------
+const shellQuote = (p) => (/^[\w@%+=:,./-]+$/.test(p) ? p : `'${p.replace(/'/g, `'\\''`)}'`);
+async function droppedPaths(dt) {
+  const out = [];
+  for (const f of [...(dt.files || [])]) {
+    let p = deck.pathForFile(f);
+    if (!p) { // z. B. Bild aus dem Browser: Inhalt speichern
+      try { p = await deck.saveDrop(f.name || 'bild.png', new Uint8Array(await f.arrayBuffer())); } catch { p = null; }
+    }
+    if (p) out.push(p);
+  }
+  if (!out.length) { // nur eine Adresse (Bild aus dem Browser ohne Datei)
+    const urls = (dt.getData('text/uri-list') || '').split(/\r?\n/).filter((u) => u && !u.startsWith('#'));
+    for (const u of urls) {
+      if (u.startsWith('file://')) out.push(decodeURIComponent(u.slice(7)));
+      else { const p = await deck.saveDropUrl(u); if (p) out.push(p); }
+    }
+  }
+  return out;
+}
+// Zwischenablage: Text normal einfügen, sonst Bild als Datei speichern und Pfad einfügen
+async function pasteSmart(pane) {
+  const t = await deck.clipRead();
+  if (t) return pane.term.paste(t);
+  const img = await deck.clipImage();
+  if (img) pane.term.paste(shellQuote(img) + ' ');
+}
+// Ablegen außerhalb einer Kachel darf die Seite nicht ersetzen
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
 
 // ---------- Lösen / Andocken ----------
 async function packPane(p) {
@@ -276,7 +322,7 @@ function handleKey(e, pane) {
     if (k === 'o') { openTakeover(); return false; }
     if (k === 'enter') { toggleZoom(focusedId); return false; }
     if (k === 'c' && pane) { const s = pane.term.getSelection(); if (s) deck.clipWrite(s); return false; }
-    if (k === 'v' && pane) { deck.clipRead().then((t) => pane.term.paste(t)); return false; }
+    if (k === 'v' && pane) { pasteSmart(pane); return false; }
   }
   if (e.ctrlKey && !e.shiftKey && (k === '+' || k === '=')) { setFontSize(fontSize + 1); return false; }
   if (e.ctrlKey && !e.shiftKey && k === '-') { setFontSize(fontSize - 1); return false; }

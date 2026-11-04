@@ -273,3 +273,10 @@ body.single #root { padding-top: var(--gap); }
 .lp-title .lp-who, .lp-title .lp-who span { text-transform: none; letter-spacing: 0; }
 .lp-title .lp-mail { font-weight: 600; color: #e3e8ff; }
 .lp-title .lp-sub { font-weight: 400; color: var(--muted); }
+
+/* Datei/Bild hineinziehen */
+.leaf.file-over { border-color: var(--cyan); box-shadow: 0 0 0 2px #7dcfff66, 0 0 24px #7dcfff33; }
+.leaf.file-over .term { position: relative; }
+.leaf.file-over .term::after { content: '⤓ Ablegen: Pfad einfügen (Bilder werden von Claude/Codex angehängt)'; position: absolute; inset: 8px;
+  display: flex; align-items: center; justify-content: center; border: 2px dashed #7dcfff88; border-radius: 8px;
+  background: #0c0d14cc; color: var(--cyan); font-family: var(--mono); font-size: 13px; pointer-events: none; z-index: 5; }

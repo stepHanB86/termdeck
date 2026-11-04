@@ -153,6 +153,44 @@ ipcMain.handle('pty:cwd', (_e, id) => cwdOf(id));
 ipcMain.on('clip:write', (_e, text, type) => clipboard.writeText(text, type || 'clipboard'));
 ipcMain.handle('clip:read', (_e, type) => clipboard.readText(type || 'clipboard'));
 
+// ---------- Dateien/Bilder ins Terminal ziehen ----------
+// Dateien ohne eigenen Pfad (Bilder aus dem Browser, Zwischenablage) landen hier und werden als Pfad eingefügt.
+const DROP_DIR = path.join(app.getPath('userData'), 'drops');
+const MAX_DROP = 30 * 1024 * 1024;
+function dropName(name, ext) {
+  const base = String(name || 'bild').replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(-80) || 'bild';
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  return path.join(DROP_DIR, `${stamp}-${Math.random().toString(36).slice(2, 6)}-${ext && !base.includes('.') ? base + '.' + ext : base}`);
+}
+function writeDrop(name, bytes, ext) {
+  fs.mkdirSync(DROP_DIR, { recursive: true });
+  const f = dropName(name, ext);
+  fs.writeFileSync(f, bytes);
+  return f;
+}
+ipcMain.handle('drop:save', (_e, name, bytes) => {
+  if (!bytes || bytes.byteLength > MAX_DROP) return null;
+  return writeDrop(name, Buffer.from(bytes));
+});
+ipcMain.handle('drop:url', async (_e, url) => {
+  try {
+    if (!/^https?:\/\//i.test(url)) return null;
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    const type = r.headers.get('content-type') || '';
+    if (!r.ok || !type.startsWith('image/')) return null;
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > MAX_DROP) return null;
+    const ext = type.split('/')[1].split(';')[0].replace('jpeg', 'jpg').replace('svg+xml', 'svg');
+    return writeDrop(decodeURIComponent(new URL(url).pathname.split('/').pop() || 'bild'), buf, ext);
+  } catch { return null; }
+});
+ipcMain.handle('clip:image', () => {
+  const img = clipboard.readImage();
+  return img.isEmpty() ? null : writeDrop('zwischenablage', img.toPNG(), 'png');
+});
+// alte abgelegte Dateien (> 14 Tage) aufräumen
+try { for (const f of fs.readdirSync(DROP_DIR)) { const p = path.join(DROP_DIR, f); if (Date.now() - fs.statSync(p).mtimeMs > 14 * 864e5) fs.unlinkSync(p); } } catch {}
+
 ipcMain.on('win:fullscreen', (e) => { const w = BrowserWindow.fromWebContents(e.sender); w?.setFullScreen(!w.isFullScreen()); });
 ipcMain.on('win:title', (e, t) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && w !== win) w.setTitle(t || 'termdeck'); });
 
