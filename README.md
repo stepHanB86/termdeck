@@ -89,6 +89,27 @@ On the next start, the tiles come back as they were, and each Claude session con
 - **Paste screenshots:** if the clipboard holds an image instead of text, `Ctrl+Shift+V` or right-click saves it
   as a PNG and inserts its path. (Inside Claude Code, `Ctrl+V` still uses Claude's own image paste.)
 
+### Voice input
+- Click **🎙** in a tile's title bar or press **`Ctrl+Shift+Space`** in the focused tile, then speak. Press it again to
+  stop. termdeck transcribes the recording and types the text into that tile. It **does not press Enter**, so you
+  can check the text first. `Esc` cancels the recording.
+- Speech recognition runs **locally and offline** with [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+  on the CPU. No audio leaves your machine and no API key is needed.
+- Speed: about 2 s for 10 s of speech with the `small` model on a 6-core CPU. The model loads in the background
+  while you speak.
+- One-time setup (Python ≥ 3.9):
+  ```bash
+  ./install-voice.sh          # installs faster-whisper into ~/.local/share/termdeck/voice-venv
+  ./install-voice.sh medium   # optional: a larger, more accurate model
+  ```
+- Settings in `~/.config/termdeck/settings.json`:
+  ```json
+  { "voice": { "model": "small", "language": "de" } }
+  ```
+  `language` defaults to German (`"de"`). Use `null` to detect the language automatically.
+  Models: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`. A new model must be downloaded once with
+  `./install-voice.sh <model>`.
+
 ### Terminal basics
 - Built on [xterm.js](https://xtermjs.org/) with WebGL rendering, truecolor and 10 000 lines of scrollback.
 - Tab titles set by programs (e.g. Claude Code's task titles) are shown in the title bar.
@@ -143,6 +164,7 @@ This installs a `.desktop` entry and the icon into `~/.local/share`, so termdeck
 | Move focus between tiles | `Alt+←/→/↑/↓` |
 | Copy / paste (pastes clipboard images as a file) | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
 | Attach an image or file | drag it onto a tile |
+| Voice input start / stop · cancel | `Ctrl+Shift+Space` or 🎙 · `Esc` |
 | Font size bigger / smaller / reset | `Ctrl++` / `Ctrl+-` / `Ctrl+0` |
 | Fullscreen on/off | `F11` |
 | Show help | `?` button in the top bar |
@@ -188,6 +210,8 @@ termdeck does not wrap or patch the agents. It reads the files they already writ
 | What | Where |
 |---|---|
 | Saved layout and sessions | `~/.config/termdeck/session.json` |
+| Voice input settings | `~/.config/termdeck/settings.json` → `voice` |
+| Voice input environment | `~/.local/share/termdeck/voice-venv` |
 | Dropped/pasted images without a file | `~/.config/termdeck/drops/` (kept for 14 days) |
 | Known accounts and their last limits | `~/.config/termdeck/accounts.json` (no tokens are stored) |
 | Desktop entry | `~/.local/share/applications/termdeck.desktop` |
@@ -201,6 +225,9 @@ and `TERM_PROGRAM=termdeck`.
 ```
 main.js            Electron main process: windows, PTYs, detach/dock routing, session save,
                    agent detection (Claude/Codex), usage limits, take-over logic
+voice/stt_server.py  local speech recognition worker (faster-whisper, JSON lines over stdin/stdout)
+app/voice-worklet.js microphone capture (raw samples, no codec)
+install-voice.sh   sets up voice input
 preload.js         the small IPC bridge exposed to the UI as window.deck
 app/index.html     top bar and overlays
 app/renderer.js    tiling tree, drag & drop, detach, badges, limits bar, take-over dialog
@@ -228,6 +255,7 @@ npx electron .
 | `TERMDECK_SCRIPT` | JavaScript run in the dashboard after start |
 | `TERMDECK_SINGLE_SCRIPT` | JavaScript run in a detached window after it opens |
 | `TERMDECK_SESSION` | use a separate session file (keeps your real layout untouched) |
+| `TERMDECK_FAKE_AUDIO` | use a WAV file instead of the microphone |
 | `TERMDECK_ACCOUNTS` | use a separate account store |
 | `TERMDECK_CLAUDE_DIR` / `TERMDECK_CODEX_DIR` | read agent data from test folders instead of `~/.claude` / `~/.codex` |
 | `TERMDECK_W` | window width in test mode |

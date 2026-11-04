@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('deck', {
   getLimits: (force) => ipcRenderer.invoke('limits:get', force),
   onLimits: (fn) => ipcRenderer.on('limits', (_e, l) => fn(l)),
   setTitle: (t) => ipcRenderer.send('win:title', t),
+  voicePrepare: () => ipcRenderer.invoke('voice:prepare'),
+  voiceTranscribe: (samples) => ipcRenderer.invoke('voice:transcribe', samples),
   toggleFullscreen: () => ipcRenderer.send('win:fullscreen'),
   saveSession: (state) => ipcRenderer.send('session:save', state),
   loadSession: () => ipcRenderer.invoke('session:load'),

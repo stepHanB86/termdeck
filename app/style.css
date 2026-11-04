@@ -297,3 +297,21 @@ body.single #root { padding-top: var(--gap); }
 @media (prefers-reduced-motion: reduce) {
   .leaf.working, .leaf.focused.working { animation: none; box-shadow: 0 0 0 1px #7aa2f799, 0 0 12px #7aa2f744; }
 }
+
+/* Spracheingabe */
+.leaf .head .b-mic { display: flex; align-items: center; justify-content: center; }
+.leaf.recording .head .b-mic { color: #fff; background: #f7768e; box-shadow: 0 0 10px #f7768e88; }
+.leaf.recording { border-color: #f7768e !important; box-shadow: 0 0 0 1px #f7768e88, 0 0 16px #f7768e44 !important; animation: none !important; }
+.rec-ind { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10.5px; padding: 1px 8px;
+  border-radius: 4px; background: #f7768e22; border: 1px solid #f7768e66; color: #ffd0d8; flex: none; }
+.rec-ind[hidden] { display: none; }
+.rec-dot { width: 7px; height: 7px; border-radius: 50%; background: #f7768e; animation: pulse 1s ease-in-out infinite; }
+.rec-lvl { width: 46px; height: 6px; border-radius: 2px; background: #0c0d14; overflow: hidden; }
+.rec-lvl i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #9ece6a, #e0af68, #f7768e); transition: width 60ms linear; }
+.rec-hint { font-style: normal; color: #ffb3c0aa; font-size: 9.5px; }
+.leaf.focused .rec-ind { color: #4a0d18; background: #ffffff55; }
+.leaf.focused .rec-hint { color: #4a0d18aa; }
+.leaf.transcribing .head .b-mic { color: var(--cyan); animation: pulse .8s ease-in-out infinite; }
+.leaf.transcribing .title::after { content: '  ⟳ erkenne Sprache …'; color: var(--cyan); font-family: var(--mono); font-size: 10.5px; }
+.leaf.focused.transcribing .title::after { color: #0f1220; }
+@media (max-width: 1300px) { .rec-hint { display: none; } }

@@ -77,7 +77,8 @@ async function createPane(cwd, cmd, attach) {
   const id = nextLeaf++;
   const el = document.createElement('div');
   el.className = 'leaf';
-  el.innerHTML = `<div class="head"><span class="dot"></span><span class="title">Terminal</span><span class="ai" hidden></span>
+  el.innerHTML = `<div class="head"><span class="dot"></span><span class="title">Terminal</span><span class="ai" hidden></span><span class="rec-ind" hidden><i class="rec-dot"></i><b class="rec-time">0:00</b><span class="rec-lvl"><i></i></span><em class="rec-hint">Strg+Shift+␣ fertig · Esc abbrechen</em></span>
+    <button class="b-mic" title="Spracheingabe (Strg+Shift+Leertaste)"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="currentColor"/><path d="M3.5 8a4.5 4.5 0 0 0 9 0M8 12.5V15M5.5 15h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
     <button class="b-detach" title="${SINGLE ? 'Zurück ins Dashboard andocken' : 'Als eigenes Fenster lösen'}">${SINGLE ? '⇲' : '⇱'}</button>
     <button class="b-zoom" title="Maximieren (Strg+Shift+Enter)">⤢</button>
     <button class="b-close" title="Schließen (Strg+Shift+W)">✕</button></div><div class="term"></div>`;
@@ -133,6 +134,7 @@ async function createPane(cwd, cmd, attach) {
   head.addEventListener('dblclick', (e) => { if (!e.target.closest('button')) toggleZoom(id); });
   el.querySelector('.b-close').onclick = () => closePane(id);
   el.querySelector('.b-zoom').onclick = () => toggleZoom(id);
+  el.querySelector('.b-mic').onclick = () => toggleVoice(id);
 
   new ResizeObserver(() => fitPane(pane)).observe(termEl);
 
@@ -204,6 +206,83 @@ async function pasteSmart(pane) {
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
+// ---------- Spracheingabe ----------
+// Aufnahme per AudioWorklet (rohe Samples, kein Codec), Erkennung lokal mit Whisper im Hauptprozess.
+let rec = null; // { paneId, stream, ctx, chunks, rate, started, level, timer }
+const MAX_REC_MS = 120000;
+async function toggleVoice(paneId) {
+  if (!panes.has(paneId)) return;
+  if (rec) { const same = rec.paneId === paneId; await stopVoice(true); if (same) return; }
+  startVoice(paneId);
+}
+async function startVoice(paneId) {
+  const pane = panes.get(paneId);
+  const prep = await deck.voicePrepare(); // lädt das Modell schon, während du sprichst
+  if (!prep.ok) return flash(prep.error);
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (err) { return flash('Kein Zugriff aufs Mikrofon: ' + err.message); }
+  const ctx = new AudioContext();
+  await ctx.audioWorklet.addModule('voice-worklet.js');
+  const src = ctx.createMediaStreamSource(stream);
+  const node = new AudioWorkletNode(ctx, 'termdeck-capture');
+  const mute = ctx.createGain(); mute.gain.value = 0;
+  src.connect(node); node.connect(mute); mute.connect(ctx.destination);
+  rec = { paneId, stream, ctx, chunks: [], rate: ctx.sampleRate, started: Date.now(), level: 0 };
+  node.port.onmessage = (e) => {
+    if (!rec) return;
+    const d = e.data; rec.chunks.push(d);
+    let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+    rec.level = Math.max(rec.level * 0.85, Math.min(1, Math.sqrt(sum / d.length) * 6));
+  };
+  pane.el.classList.add('recording');
+  const ind = pane.el.querySelector('.rec-ind'); ind.hidden = false;
+  const tick = () => {
+    if (!rec) return;
+    const ms = Date.now() - rec.started;
+    ind.querySelector('.rec-time').textContent = `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+    ind.querySelector('.rec-lvl i').style.width = Math.round(rec.level * 100) + '%';
+    if (ms > MAX_REC_MS) stopVoice(true);
+  };
+  rec.timer = setInterval(tick, 80); tick();
+}
+// Auf 16 kHz herunterrechnen (Mittelwert je Ausgabe-Sample)
+function to16k(chunks, rate) {
+  let n = 0; for (const c of chunks) n += c.length;
+  const all = new Float32Array(n); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  if (rate === 16000) return all;
+  const ratio = rate / 16000, out = new Float32Array(Math.floor(n / ratio));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(n, Math.floor((i + 1) * ratio));
+    let s = 0; for (let j = a; j < b; j++) s += all[j]; out[i] = s / Math.max(1, b - a);
+  }
+  return out;
+}
+async function stopVoice(transcribe) {
+  const r = rec; rec = null;
+  if (!r) return;
+  clearInterval(r.timer);
+  r.stream.getTracks().forEach((t) => t.stop());
+  r.ctx.close();
+  const pane = panes.get(r.paneId);
+  if (!pane) return;
+  pane.el.classList.remove('recording');
+  pane.el.querySelector('.rec-ind').hidden = true;
+  if (!transcribe) return;
+  const audio = to16k(r.chunks, r.rate);
+  if (audio.length < 16000 * 0.4) return flash('Zu kurz – nichts erkannt');
+  pane.el.classList.add('transcribing');
+  const res = await deck.voiceTranscribe(audio);
+  pane.el.classList.remove('transcribing');
+  if (!panes.has(r.paneId)) return;
+  if (res.error) return flash(res.error);
+  const text = (res.text || '').trim();
+  if (!text) return flash('Nichts verstanden');
+  pane.term.paste(text);     // ohne Enter – du prüfst und schickst selbst ab
+  setFocus(pane.id); pane.term.focus();
+}
+
 // ---------- Lösen / Andocken ----------
 async function packPane(p) {
   await deck.hold(p.ptyId);                         // Ausgabe puffern
@@ -262,6 +341,7 @@ async function newTerminal(opts) {
 function closePane(id, exited = false) {
   const p = panes.get(id);
   if (!p) return;
+  if (rec?.paneId === id) stopVoice(false);
   if (!exited && p.ptyId) deck.kill(p.ptyId);
   byPty.delete(p.ptyId);
   p.term.dispose();
@@ -320,6 +400,7 @@ function handleKey(e, pane) {
     if (k === 'w') { closePane(focusedId); return false; }
     if (k === 'b') { balance(); return false; }
     if (k === 'o') { openTakeover(); return false; }
+    if (e.code === 'Space') { toggleVoice(focusedId); return false; }
     if (k === 'enter') { toggleZoom(focusedId); return false; }
     if (k === 'c' && pane) { const s = pane.term.getSelection(); if (s) deck.clipWrite(s); return false; }
     if (k === 'v' && pane) { pasteSmart(pane); return false; }
@@ -332,6 +413,7 @@ function handleKey(e, pane) {
     moveFocus(...d); return false;
   }
   if (e.key === 'F11') { deck.toggleFullscreen(); return false; }
+  if (e.key === 'Escape' && rec) { stopVoice(false); return false; }
   return true;
 }
 window.addEventListener('keydown', (e) => { if (!e.target.closest?.('.xterm') && handleKey(e, panes.get(focusedId)) === false) e.preventDefault(); });

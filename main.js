@@ -1,5 +1,6 @@
 // termdeck – Hauptprozess: Fenster, PTYs, Sitzung speichern
-const { app, BrowserWindow, ipcMain, clipboard, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, Menu, session } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -20,6 +21,11 @@ function cwdOf(id) {
   try { return fs.readlinkSync(`/proc/${p.pid}/cwd`); } catch { return null; }
 }
 
+// Testmodus: Audiodatei statt Mikrofon (TERMDECK_FAKE_AUDIO=/pfad.wav)
+if (process.env.TERMDECK_FAKE_AUDIO) {
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.TERMDECK_FAKE_AUDIO);
+}
 // Testmodus: TERMDECK_SHOT=/pfad.png → unsichtbar starten, Screenshot, beenden
 const SHOT = process.env.TERMDECK_SHOT;
 
@@ -673,6 +679,69 @@ ipcMain.handle('takeover:shell', (_e, { pid, close }) => {
   return { cwd };
 });
 
+// ---------- Spracheingabe (lokales Whisper) ----------
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
+function settings() { try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return {}; } }
+const VOICE_PY = process.env.TERMDECK_VOICE_PY || path.join(os.homedir(), '.local', 'share', 'termdeck', 'voice-venv', 'bin', 'python');
+let voice = null; // { proc, ready, waiting: Map, readyWaiters: [] }
+let voiceSeq = 1;
+function startVoice() {
+  if (voice) return voice;
+  if (!fs.existsSync(VOICE_PY)) return null;
+  const cfg = settings().voice || {};
+  const proc = spawn(VOICE_PY, ['-I', path.join(__dirname, 'voice', 'stt_server.py')], {
+    env: { ...process.env, TERMDECK_STT_MODEL: cfg.model || 'small', HF_HUB_OFFLINE: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  voice = { proc, ready: false, error: null, waiting: new Map(), readyWaiters: [] };
+  let buf = '';
+  proc.stdout.on('data', (d) => {
+    buf += d.toString();
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 1);
+      let msg; try { msg = JSON.parse(line); } catch { continue; }
+      if ('ready' in msg) {
+        voice.ready = msg.ready; voice.error = msg.error || null;
+        voice.readyWaiters.splice(0).forEach((f) => f());
+      } else if (voice.waiting.has(msg.id)) { voice.waiting.get(msg.id)(msg); voice.waiting.delete(msg.id); }
+    }
+  });
+  proc.stderr.on('data', () => {}); // Warnungen der Bibliotheken ignorieren
+  proc.on('exit', () => {
+    const v = voice; voice = null;
+    v?.readyWaiters.splice(0).forEach((f) => f());
+    for (const f of v?.waiting.values() || []) f({ error: 'Spracherkennung beendet' });
+  });
+  return voice;
+}
+const voiceReady = (v) => (v.ready || v.error ? Promise.resolve() : new Promise((r) => v.readyWaiters.push(r)));
+// Beim Start der Aufnahme schon laden, damit das Modell bereit ist, wenn man aufhört zu sprechen
+ipcMain.handle('voice:prepare', () => {
+  const v = startVoice();
+  return v ? { ok: true } : { ok: false, error: 'Spracheingabe ist nicht eingerichtet – im termdeck-Ordner ./install-voice.sh ausführen' };
+});
+ipcMain.handle('voice:transcribe', async (_e, samples) => {
+  const v = startVoice();
+  if (!v) return { error: 'Spracheingabe ist nicht eingerichtet – ./install-voice.sh ausführen' };
+  await voiceReady(v);
+  if (!v.ready) return { error: 'Sprachmodell konnte nicht geladen werden: ' + (v.error || 'unbekannt') };
+  const id = voiceSeq++;
+  const cfg = settings().voice || {};
+  const audio = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength).toString('base64');
+  return new Promise((resolve) => {
+    v.waiting.set(id, resolve);
+    v.proc.stdin.write(JSON.stringify({ id, audio, language: cfg.language === undefined ? 'de' : cfg.language }) + '\n');
+  });
+});
+app.on('will-quit', () => { try { voice?.proc.kill(); } catch {} });
+
+app.whenReady().then(() => {
+  // Mikrofon nur für termdeck selbst freigeben
+  const allow = (perm, url) => (perm === 'media' || perm === 'audioCapture') && String(url || '').startsWith('file://');
+  session.defaultSession.setPermissionRequestHandler((wc, perm, cb, details) => cb(allow(perm, details?.requestingUrl || wc.getURL())));
+  session.defaultSession.setPermissionCheckHandler((wc, perm, origin) => allow(perm, origin || wc?.getURL()));
+});
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
   for (const p of ptys.values()) { try { p.kill(); } catch {} }
