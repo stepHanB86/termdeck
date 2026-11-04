@@ -10,6 +10,7 @@ const panes = new Map(); // leafId -> { id, ptyId, term, fit, el, titleEl, title
 const byPty = new Map(); // ptyId -> pane
 let tree = null;
 let focusedId = null;
+let lastFocusedId = null; // bleibt nach dem Abwählen erhalten: Platz für neue Kacheln, Alt+Pfeile
 let zoomedId = null;
 let nextLeaf = 1;
 let fontSize = 13;
@@ -317,7 +318,9 @@ deck.onAdopt(async (ptyId, payload) => {
 
 function setFocus(id) {
   if (focusedId === id) return;
+  panes.get(focusedId)?.term.blur();
   focusedId = id;
+  if (id) lastFocusedId = id;
   for (const p of panes.values()) p.el.classList.toggle('focused', p.id === id);
   const p = panes.get(id);
   if (p) { p.el.classList.remove('unseen', 'bell'); p.term.focus(); }
@@ -326,12 +329,13 @@ function setFocus(id) {
 // ---------- Aktionen ----------
 async function newTerminal(opts) {
   if (!opts || opts instanceof Event) opts = {};
-  const ref = panes.get(focusedId);
+  const refId = focusedId || lastFocusedId;
+  const ref = panes.get(refId);
   const cwd = opts.attach ? null : opts.cwd || (ref?.ptyId ? await deck.cwd(ref.ptyId) : null);
   const id = await createPane(cwd, opts.cmd, opts.attach);
   if (!tree) tree = leaf(id);
   else {
-    const target = (zoomedId && findLeaf(tree, zoomedId)) || findLeaf(tree, focusedId) || tree;
+    const target = (zoomedId && findLeaf(tree, zoomedId)) || findLeaf(tree, refId) || tree;
     const rect = target.type === 'leaf' ? panes.get(target.id).el.getBoundingClientRect() : rootEl.getBoundingClientRect();
     const dir = rect.width / 1.6 >= rect.height ? 'row' : 'col';
     tree = replaceNode(tree, target, split(dir, target, leaf(id)));
@@ -372,7 +376,7 @@ function balance() {
 
 function moveFocus(dx, dy) {
   const cur = panes.get(focusedId);
-  if (!cur) return;
+  if (!cur) { const p = panes.get(lastFocusedId) || panes.values().next().value; if (p) setFocus(p.id); return; }
   const a = cur.el.getBoundingClientRect();
   const ax = a.left + a.width / 2, ay = a.top + a.height / 2;
   let best = null, bestD = Infinity;
@@ -404,7 +408,7 @@ function handleKey(e, pane) {
     if (k === 'w') { closePane(focusedId); return false; }
     if (k === 'b') { balance(); return false; }
     if (k === 'o') { openTakeover(); return false; }
-    if (e.code === 'Space') { toggleVoice(focusedId); return false; }
+    if (e.code === 'Space') { toggleVoice(focusedId || rec?.paneId); return false; }
     if (k === 'enter') { toggleZoom(focusedId); return false; }
     if (k === 'c' && pane) { const s = pane.term.getSelection(); if (s) deck.clipWrite(s); return false; }
     if (k === 'v' && pane) { pasteSmart(pane); return false; }
@@ -637,6 +641,8 @@ function openModelMenu(pane, e) {
 }
 function closeMenu() { menuEl.style.display = 'none'; }
 window.addEventListener('mousedown', (e) => { if (!e.target.closest('#menu')) closeMenu(); });
+// Klick neben die Kacheln (z. B. in die Leiste) wählt das Terminal ab
+window.addEventListener('mousedown', (e) => { if (!SINGLE && !e.target.closest('.leaf, .divider, #menu, #takeover')) setFocus(null); });
 
 // ---------- Übernehmen ----------
 const takeEl = document.getElementById('takeover');
