@@ -508,6 +508,7 @@ deck.onAiStatus((all) => {
     const a = all[p.ptyId] || null;
     p.ai = a;
     p.aiEl.hidden = !a;
+    p.el.classList.toggle('working', !!a && !!a.status && a.status !== 'idle');
     if (!a) continue;
     n++; ctx += a.ctx || 0;
     const working = a.status && a.status !== 'idle';

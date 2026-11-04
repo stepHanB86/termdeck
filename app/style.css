@@ -280,3 +280,20 @@ body.single #root { padding-top: var(--gap); }
 .leaf.file-over .term::after { content: '⤓ Ablegen: Pfad einfügen (Bilder werden von Claude/Codex angehängt)'; position: absolute; inset: 8px;
   display: flex; align-items: center; justify-content: center; border: 2px dashed #7dcfff88; border-radius: 8px;
   background: #0c0d14cc; color: var(--cyan); font-family: var(--mono); font-size: 13px; pointer-events: none; z-index: 5; }
+
+/* Ausgewählt = hellgelber Rahmen, arbeitender Agent = blau pulsierend */
+:root { --focus: #e6c46a; --work: #7aa2f7; }
+.leaf.focused { border-color: var(--focus); box-shadow: 0 0 0 1px #e6c46a66, 0 0 10px #e6c46a22; }
+.leaf.working { animation: work-pulse 2.4s ease-in-out infinite; }
+.leaf.focused.working { animation-name: work-pulse-focused; }
+@keyframes work-pulse {
+  0%, 100% { border-color: #7aa2f755; box-shadow: 0 0 0 1px #7aa2f722, 0 0 0 #7aa2f700; }
+  50%      { border-color: #7aa2f7;   box-shadow: 0 0 0 1px #7aa2f799, 0 0 18px #7aa2f755; }
+}
+@keyframes work-pulse-focused {
+  0%, 100% { border-color: var(--focus); box-shadow: 0 0 0 1px #e6c46a66, 0 0 4px #7aa2f700; }
+  50%      { border-color: var(--focus); box-shadow: 0 0 0 1px #e6c46a99, 0 0 20px #7aa2f777; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .leaf.working, .leaf.focused.working { animation: none; box-shadow: 0 0 0 1px #7aa2f799, 0 0 12px #7aa2f744; }
+}
