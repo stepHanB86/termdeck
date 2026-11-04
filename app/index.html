@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>termdeck</title>
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="bar">
+    <span class="brand"><img src="../assets/termdeck.svg" alt="">term<b>deck</b></span>
+    <button id="btn-new" title="Neues Terminal (Strg+Shift+T)">＋<span class="lbl"> Terminal</span></button>
+    <button id="btn-balance" title="Gleichmäßig anordnen (Strg+Shift+B)">▦<span class="lbl"> Anordnen</span></button>
+    <button id="btn-take" title="Laufende Terminals/Claude-Sitzungen hereinholen (Strg+Shift+O)">⇲<span class="lbl"> Übernehmen</span></button>
+    <span id="waiting" hidden></span>
+    <span class="spacer"></span>
+    <span id="ai-summary" hidden></span>
+    <div id="limits" title="Nutzungslimits – Klick für Details"></div>
+    <button id="btn-help" class="icon" title="Bedienung">?</button>
+    <button id="btn-full" class="icon" title="Vollbild (F11)">⛶</button>
+    <div id="help">
+      <b>Bedienung</b>
+      <div><kbd>Titel ziehen</kbd> auf Kachel: Rand = andocken, Mitte = tauschen</div>
+      <div><kbd>Titel nach oben ziehen</kbd> = als eigenes Fenster lösen (oder ⇱)</div>
+      <div><kbd>Teiler ziehen</kbd> = Größe · Doppelklick = 50/50</div>
+      <div><kbd>Doppelklick Titel</kbd> / <kbd>Strg+Shift+Enter</kbd> = maximieren</div>
+      <div><kbd>Strg+Shift+T</kbd> neu · <kbd>Strg+Shift+W</kbd> schließen</div>
+      <div><kbd>Strg+Shift+B</kbd> anordnen · <kbd>Strg+Shift+O</kbd> übernehmen</div>
+      <div><kbd>Alt+Pfeile</kbd> Fokus · <kbd>Strg +/−/0</kbd> Schrift · <kbd>F11</kbd> Vollbild</div>
+    </div>
+  </div>
+  <div id="root"></div>
+  <div id="drop-indicator"></div>
+  <div id="drag-ghost"></div>
+  <div id="menu"></div>
+  <div id="limits-pop"></div>
+  <div id="detach-zone"><span>⇱ Hier loslassen: als eigenes Fenster lösen</span></div>
+  <div id="takeover"></div>
+
+  <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="../node_modules/@xterm/addon-webgl/lib/addon-webgl.js"></script>
+  <script src="../node_modules/@xterm/addon-serialize/lib/addon-serialize.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
