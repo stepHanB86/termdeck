@@ -105,6 +105,9 @@ async function createPane(cwd, cmd, attach) {
   term.textarea?.addEventListener('focus', () => setFocus(id));
   termEl.addEventListener('mousedown', () => setFocus(id));
   termEl.addEventListener('auxclick', async (e) => { if (e.button === 1) term.paste(await deck.clipRead('selection')); });
+  // Einfügen läuft nur über unsere Handler (Strg+Shift+V, Rechts-/Mittelklick). Das native
+  // paste-Event des Browsers würde sonst zusätzlich in xterm landen → Text kam doppelt an.
+  termEl.addEventListener('paste', (e) => { e.preventDefault(); e.stopImmediatePropagation(); }, true);
   termEl.addEventListener('contextmenu', async (e) => {
     e.preventDefault();
     const s = term.getSelection();
@@ -395,6 +398,7 @@ function setFontSize(s) {
 function handleKey(e, pane) {
   if (e.type !== 'keydown') return true;
   const k = e.key.toLowerCase();
+  if (e.ctrlKey && e.shiftKey && 'twbocv'.includes(k) && k.length === 1) e.preventDefault();
   if (e.ctrlKey && e.shiftKey) {
     if (k === 't') { newTerminal(); return false; }
     if (k === 'w') { closePane(focusedId); return false; }
